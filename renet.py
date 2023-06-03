@@ -19,7 +19,7 @@ CFG.seq_len = 5
 CFG.model = "Renet"
 CFG.tags = "Baseline"
 CFG.batch_size = 4096
-CFG.hidden_channels = 100
+CFG.hidden_channels = 10
 CFG.wandb = False
 if CFG.wandb:
     wandb.login(key="8df071c79082d7ec99e9da99802221c4edef7d8c")

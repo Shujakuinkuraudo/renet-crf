@@ -210,7 +210,7 @@ class RENet(torch.nn.Module):
     def cluster(self, num_clusters) -> Tensor:
         from sklearn.cluster import KMeans
         # 将张量转换为NumPy数组
-        ent_np = self.ent.cpu().numpy()
+        ent_np = self.ent.detach().cpu().numpy()
 
         # 使用K-means进行聚类
         kmeans = KMeans(n_clusters=num_clusters)

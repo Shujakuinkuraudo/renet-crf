@@ -3,3 +3,4 @@ wandb/
 *.swp
 checkpoints/
 data/
+__pycache__/
