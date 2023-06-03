@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.datasets import ICEWS18
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn.models.re_net import RENet
+from Myrenet import RENet
 import numpy as np
 from tqdm import tqdm
 
@@ -14,11 +14,11 @@ from easydict import EasyDict
 CFG = EasyDict()
 CFG.project = "temporal-knowledge-base-completion"
 CFG.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-CFG.epochs = 21
+CFG.epochs = 1
 CFG.seq_len = 5
 CFG.model = "Renet"
 CFG.tags = "Baseline"
-CFG.batch_size = 2048
+CFG.batch_size = 4096
 CFG.hidden_channels = 100
 CFG.wandb = False
 if CFG.wandb:
@@ -89,8 +89,9 @@ def test(loader):
     return result.tolist()  # %%
 
 
-for epoch in range(1, 21):
+for epoch in range(CFG.epochs):
     train(train_loader)
+    print(model.cluster(20))
     mrr, hits1, hits3, hits10 = test(test_loader)
     if CFG.wandb:
         wandb.log({"epoch": epoch, "MRR": mrr, "Hits@1": hits1, "Hits@3": hits3, "Hits@10": hits10})

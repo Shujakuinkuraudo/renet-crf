@@ -20,7 +20,7 @@ for start_point, model in itertools.product(
     CFG.lr = 1e-3
     CFG.wandb = True
     CFG.max_iter = int(3 * 1e5)
-    CFG.tags = ["v3"]
+    CFG.tags = ["v4"]
     if CFG.wandb:
         # from kaggle_secrets import UserSecretsClient
         #

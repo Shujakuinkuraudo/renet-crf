@@ -74,6 +74,9 @@ class Optimizer:
                 tqdm.write(str(self.forward(function_value)), end="")
 
 
+np.dis
+
+
 class GD(Optimizer):
     def __init__(self, CFG, function, lr=1e-2, iter_eps=1e-6, max_iter=1000):
         super().__init__(CFG, function, max_iter)
@@ -126,7 +129,8 @@ class Adam(Optimizer):
             m_t = self.beta_1 * m_t + (1 - self.beta_1) * g_t
             v_t = self.beta_2 * v_t + (1 - self.beta_2) * (g_t ** 2)
 
-            delta = self.lr * (m_t / (1 - self.beta_1)) / (torch.sqrt(v_t / (1 - self.beta_2)) + self.eps)
+            delta = self.lr * (m_t / (1 - self.beta_1 ** (_ + 1))) / (
+                    torch.sqrt(v_t / (1 - self.beta_2 ** (_ + 1))) + self.eps)
             if torch.norm(delta) <= self.iter_eps:
                 wandb.log({"finish_epoch": _})
                 break
