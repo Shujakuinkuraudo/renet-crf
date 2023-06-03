@@ -7,7 +7,7 @@ model = CRF(num_tags)
 
 batch_size, sequence_length = 3, 5
 emissions = torch.randn(batch_size, sequence_length, num_tags)
-
+print(emissions)
 tags = torch.LongTensor([
     [1, 2, 3, 3, 5],
     [1, 3, 4, 2, 1],
