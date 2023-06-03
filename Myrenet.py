@@ -57,6 +57,7 @@ class RENet(torch.nn.Module):
     ):
         super().__init__()
 
+        self.cluster_labels = None
         self.num_nodes = num_nodes
         self.hidden_channels = hidden_channels
         self.num_rels = num_rels
@@ -186,6 +187,11 @@ class RENet(torch.nn.Module):
                              dim_size=batch_size * seq_len).view(
             batch_size, seq_len, -1)
 
+        ent_sub_class = torch.zeros(self.ent.size(0), 5, self.ent.size(1)).cuda()
+        ent_obj_class = torch.zeros(self.ent.size(0), 5, self.ent.size(1)).cuda()
+        ent_sub_class[data.h_sub, data.h_sub_t] = self.ent[data.h_sub]
+        ent_obj_class[data.h_obj, data.h_obj_t] = self.ent[data.h_obj]
+
         sub = self.ent[data.sub].unsqueeze(1).repeat(1, seq_len, 1)
         rel = self.rel[data.rel].unsqueeze(1).repeat(1, seq_len, 1)
         obj = self.ent[data.obj].unsqueeze(1).repeat(1, seq_len, 1)
@@ -218,7 +224,7 @@ class RENet(torch.nn.Module):
 
         # 将聚类标签转换为PyTorch张量
         cluster_labels = torch.from_numpy(labels)
-
+        self.cluster_labels = cluster_labels
         return cluster_labels
 
     def test(self, logits: Tensor, y: Tensor) -> Tensor:

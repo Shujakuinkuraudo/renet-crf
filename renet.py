@@ -95,6 +95,6 @@ for epoch in range(CFG.epochs):
     mrr, hits1, hits3, hits10 = test(test_loader)
     if CFG.wandb:
         wandb.log({"epoch": epoch, "MRR": mrr, "Hits@1": hits1, "Hits@3": hits3, "Hits@10": hits10})
-torch.save(model.state_dict(), "a.pt")
+torch.save(model.state_dict(), "weights/a.pt")
 if CFG.wandb:
     run.finish()
