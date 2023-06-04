@@ -16,5 +16,5 @@ CFG.crf_obj_weight = None
 CFG.crf_sub_weight = None
 CFG.crf_train = True
 CFG.baseline_train = False
-CFG.train_percent = 1
-CFG.test_percent = 1
+CFG.train_percent = 0.01
+CFG.test_percent = 0.01
