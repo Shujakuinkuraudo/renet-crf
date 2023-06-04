@@ -8,6 +8,7 @@ from torch.nn import GRU, Linear, Parameter
 from torch_scatter import scatter_mean
 
 from torch_geometric.data.data import Data
+from test import BiLSTM_crf
 
 
 class RENet(torch.nn.Module):
@@ -54,6 +55,7 @@ class RENet(torch.nn.Module):
             num_layers: int = 1,
             dropout: float = 0.,
             bias: bool = True,
+            num_tags: int = 20
     ):
         super().__init__()
 
@@ -63,6 +65,7 @@ class RENet(torch.nn.Module):
         self.num_rels = num_rels
         self.seq_len = seq_len
         self.dropout = dropout
+        self.num_tags = num_tags
 
         self.ent = Parameter(torch.Tensor(num_nodes, hidden_channels))
         self.rel = Parameter(torch.Tensor(num_rels, hidden_channels))
@@ -74,6 +77,9 @@ class RENet(torch.nn.Module):
 
         self.sub_lin = Linear(3 * hidden_channels, num_nodes, bias=bias)
         self.obj_lin = Linear(3 * hidden_channels, num_nodes, bias=bias)
+
+        self.lstm_crf_sub = BiLSTM_crf(self.hidden_channels, 5, 5, self.num_tags)
+        self.lstm_crf_obj = BiLSTM_crf(self.hidden_channels, 5, 5, self.num_tags)
 
         self.reset_parameters()
 
@@ -187,11 +193,6 @@ class RENet(torch.nn.Module):
                              dim_size=batch_size * seq_len).view(
             batch_size, seq_len, -1)
 
-        ent_sub_class = torch.zeros(self.ent.size(0), 5, self.ent.size(1)).cuda()
-        ent_obj_class = torch.zeros(self.ent.size(0), 5, self.ent.size(1)).cuda()
-        ent_sub_class[data.h_sub, data.h_sub_t] = self.ent[data.h_sub]
-        ent_obj_class[data.h_obj, data.h_obj_t] = self.ent[data.h_obj]
-
         sub = self.ent[data.sub].unsqueeze(1).repeat(1, seq_len, 1)
         rel = self.rel[data.rel].unsqueeze(1).repeat(1, seq_len, 1)
         obj = self.ent[data.obj].unsqueeze(1).repeat(1, seq_len, 1)
@@ -213,19 +214,77 @@ class RENet(torch.nn.Module):
 
         return log_prob_obj, log_prob_sub
 
-    def cluster(self, num_clusters) -> Tensor:
+    def cluster(self) -> Tensor:
         from sklearn.cluster import KMeans
         # 将张量转换为NumPy数组
         ent_np = self.ent.detach().cpu().numpy()
 
         # 使用K-means进行聚类
-        kmeans = KMeans(n_clusters=num_clusters)
+        kmeans = KMeans(n_clusters=self.num_tags, n_init=10)
         labels = kmeans.fit_predict(ent_np)
 
         # 将聚类标签转换为PyTorch张量
         cluster_labels = torch.from_numpy(labels)
         self.cluster_labels = cluster_labels
-        return cluster_labels
+
+    def generate_crf_train(self, data: Data) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+        seq_len_mul_hidden = self.seq_len * self.hidden_channels
+        ent_sub = torch.zeros(data.sub.size(0), seq_len_mul_hidden)
+        ent_obj = torch.zeros(data.sub.size(0), seq_len_mul_hidden)
+        index_sub = [seq_len_mul_hidden - self.hidden_channels] * data.sub.size(0)
+        index_obj = [seq_len_mul_hidden - self.hidden_channels] * data.obj.size(0)
+
+        tags_sub = torch.full((data.sub.size(0), self.seq_len), -1, dtype=torch.long)
+        tags_obj = torch.full((data.sub.size(0), self.seq_len), -1, dtype=torch.long)
+
+        index_tags_sub = [self.seq_len - 2] * data.sub.size(0)
+        index_tags_obj = [self.seq_len - 2] * data.obj.size(0)
+
+        for i in range(data.sub.size(0)):
+            tags_sub[i][-1] = self.cluster_labels[data.obj[i]]
+
+        for i in range(data.obj.size(0)):
+            tags_obj[i][-1] = self.cluster_labels[data.sub[i]]
+
+        def fill_ent_tags(ent, index_ent, tags, index_tags, h_batch, h, hidden_channels):
+            for i in range(h.size(0) - 1, -1, -1):
+                if index_ent[h_batch[i]] >= 0:
+                    ent[h_batch[i], index_ent[h_batch[i]]:index_ent[h_batch[i]] + hidden_channels] = self.ent[
+                        h_batch[i]]
+                if index_tags[h_batch[i]] >= 0:
+                    tags[h_batch[i], index_tags[h_batch[i]]] = self.cluster_labels[h[i]]
+                index_ent[h_batch[i]] -= hidden_channels
+                index_tags[h_batch[i]] -= 1
+
+        fill_ent_tags(ent_sub, index_sub, tags_sub, index_tags_sub, data.h_sub_batch, data.h_sub, self.hidden_channels)
+        fill_ent_tags(ent_obj, index_obj, tags_obj, index_tags_obj, data.h_obj_batch, data.h_obj, self.hidden_channels)
+
+        ent_sub = ent_sub.view(data.sub.size(0), self.seq_len, self.hidden_channels)
+        ent_obj = ent_obj.view(data.sub.size(0), self.seq_len, self.hidden_channels)
+
+        return ent_sub, ent_obj, tags_sub, tags_obj
+
+    def generate_crf_test(self, data: Data) -> Tuple[Tensor, Tensor]:
+        seq_len_mul_hidden = self.seq_len * self.hidden_channels
+        ent_sub = torch.zeros(data.sub.size(0), seq_len_mul_hidden)
+        ent_obj = torch.zeros(data.sub.size(0), seq_len_mul_hidden)
+        index_sub = [seq_len_mul_hidden - self.hidden_channels] * data.sub.size(0)
+        index_obj = [seq_len_mul_hidden - self.hidden_channels] * data.obj.size(0)
+
+        def fill_ent_tags(ent, index_ent, h_batch, h, hidden_channels):
+            for i in range(h.size(0) - 1, -1, -1):
+                if index_ent[h_batch[i]] >= 0:
+                    ent[h_batch[i], index_ent[h_batch[i]]:index_ent[h_batch[i]] + hidden_channels] = self.ent[
+                        h_batch[i]]
+                index_ent[h_batch[i]] -= hidden_channels
+
+        fill_ent_tags(ent_sub, index_sub, data.h_sub_batch, data.h_sub, self.hidden_channels)
+        fill_ent_tags(ent_obj, index_obj, data.h_obj_batch, data.h_obj, self.hidden_channels)
+
+        ent_sub = ent_sub.view(data.sub.size(0), self.seq_len, self.hidden_channels)
+        ent_obj = ent_obj.view(data.sub.size(0), self.seq_len, self.hidden_channels)
+
+        return ent_sub, ent_obj
 
     def test(self, logits: Tensor, y: Tensor) -> Tensor:
         """Given ground-truth :obj:`y`, computes Mean Reciprocal Rank (MRR)
@@ -241,3 +300,39 @@ class RENet(torch.nn.Module):
         hits10 = mask[:, :10].sum().item() / y.size(0)
 
         return torch.tensor([mrr, hits1, hits3, hits10])
+
+    def test_crf(self, logits, y, cluster):
+        _, perm = logits.sort(dim=1, descending=True)
+
+        answer = [0] * logits.size(0)
+        for _ in range(len(perm)):
+            for __ in perm[_]:
+                if self.cluster_labels[__] == cluster:
+                    answer[_] = __
+                    break
+        mask = (y.view(-1, 1) == answer)
+        hits1 = mask.sum() / len(mask)
+        return hits1
+
+
+class renet_crf(torch.nn.Module):
+    def __init__(
+            self,
+            num_nodes: int,
+            num_rels: int,
+            hidden_channels: int,
+            seq_len: int,
+            num_layers: int = 1,
+            dropout: float = 0.,
+            bias: bool = True,
+            num_tags: int = 20
+    ):
+        super().__init__()
+        self.num_tags = num_tags
+        self.renet = RENet(num_nodes, num_rels, hidden_channels, seq_len, num_layers, dropout, bias)
+
+    def forward(self, data: Data):
+        return self.renet(data)
+
+    def cluster(self):
+        self.renet.cluster(self.num_tags)
