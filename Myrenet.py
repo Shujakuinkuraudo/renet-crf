@@ -9,6 +9,7 @@ from torch_scatter import scatter_mean
 
 from torch_geometric.data.data import Data
 from test import BiLSTM_crf
+from config import CFG
 
 
 class RENet(torch.nn.Module):
@@ -214,37 +215,35 @@ class RENet(torch.nn.Module):
 
         return log_prob_obj, log_prob_sub
 
-    def cluster(self) -> Tensor:
+    def cluster(self, num_tags) -> Tensor:
         from sklearn.cluster import KMeans
         # 将张量转换为NumPy数组
         ent_np = self.ent.detach().cpu().numpy()
 
         # 使用K-means进行聚类
-        kmeans = KMeans(n_clusters=self.num_tags, n_init=10)
+        kmeans = KMeans(n_clusters=num_tags, n_init=10)
         labels = kmeans.fit_predict(ent_np)
 
         # 将聚类标签转换为PyTorch张量
         cluster_labels = torch.from_numpy(labels)
-        self.cluster_labels = cluster_labels
+        self.cluster_labels = cluster_labels.long().cuda()
 
     def generate_crf_train(self, data: Data) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         seq_len_mul_hidden = self.seq_len * self.hidden_channels
-        ent_sub = torch.zeros(data.sub.size(0), seq_len_mul_hidden)
-        ent_obj = torch.zeros(data.sub.size(0), seq_len_mul_hidden)
+        ent_sub = torch.zeros(data.sub.size(0), seq_len_mul_hidden).to(CFG.device)
+        ent_obj = torch.zeros(data.sub.size(0), seq_len_mul_hidden).to(CFG.device)
         index_sub = [seq_len_mul_hidden - self.hidden_channels] * data.sub.size(0)
         index_obj = [seq_len_mul_hidden - self.hidden_channels] * data.obj.size(0)
 
-        tags_sub = torch.full((data.sub.size(0), self.seq_len), -1, dtype=torch.long)
-        tags_obj = torch.full((data.sub.size(0), self.seq_len), -1, dtype=torch.long)
+        tags_sub = torch.full((data.sub.size(0), self.seq_len), -1, dtype=torch.long).to(CFG.device)
+        tags_obj = torch.full((data.sub.size(0), self.seq_len), -1, dtype=torch.long).to(CFG.device)
 
         index_tags_sub = [self.seq_len - 2] * data.sub.size(0)
         index_tags_obj = [self.seq_len - 2] * data.obj.size(0)
 
-        for i in range(data.sub.size(0)):
-            tags_sub[i][-1] = self.cluster_labels[data.obj[i]]
+        tags_sub[:, -1] = self.cluster_labels[data.obj[:]]
 
-        for i in range(data.obj.size(0)):
-            tags_obj[i][-1] = self.cluster_labels[data.sub[i]]
+        tags_obj[:, -1] = self.cluster_labels[data.sub[:]]
 
         def fill_ent_tags(ent, index_ent, tags, index_tags, h_batch, h, hidden_channels):
             for i in range(h.size(0) - 1, -1, -1):
@@ -266,8 +265,8 @@ class RENet(torch.nn.Module):
 
     def generate_crf_test(self, data: Data) -> Tuple[Tensor, Tensor]:
         seq_len_mul_hidden = self.seq_len * self.hidden_channels
-        ent_sub = torch.zeros(data.sub.size(0), seq_len_mul_hidden)
-        ent_obj = torch.zeros(data.sub.size(0), seq_len_mul_hidden)
+        ent_sub = torch.zeros(data.sub.size(0), seq_len_mul_hidden).to(CFG.device)
+        ent_obj = torch.zeros(data.sub.size(0), seq_len_mul_hidden).to(CFG.device)
         index_sub = [seq_len_mul_hidden - self.hidden_channels] * data.sub.size(0)
         index_obj = [seq_len_mul_hidden - self.hidden_channels] * data.obj.size(0)
 
@@ -296,23 +295,30 @@ class RENet(torch.nn.Module):
         nnz = mask.nonzero(as_tuple=False)
         mrr = (1 / (nnz[:, -1] + 1).to(torch.float)).mean().item()
         hits1 = mask[:, :1].sum().item() / y.size(0)
+        hits2 = mask[:, :2].sum().item() / y.size(0)
         hits3 = mask[:, :3].sum().item() / y.size(0)
         hits10 = mask[:, :10].sum().item() / y.size(0)
 
-        return torch.tensor([mrr, hits1, hits3, hits10])
+        return torch.tensor([mrr, hits1, hits2, hits3, hits10])
 
     def test_crf(self, logits, y, cluster):
         _, perm = logits.sort(dim=1, descending=True)
 
-        answer = [0] * logits.size(0)
-        for _ in range(len(perm)):
-            for __ in perm[_]:
-                if self.cluster_labels[__] == cluster:
-                    answer[_] = __
-                    break
-        mask = (y.view(-1, 1) == answer)
-        hits1 = mask.sum() / len(mask)
-        return hits1
+        cluster_labels = self.cluster_labels.cuda()[perm]
+        cluster = cluster.cuda()
+
+        mask_tags = (cluster_labels == cluster.view(-1, 1)).int()
+
+        first_true_indices_tags = torch.argmax(mask_tags, dim=0)
+
+        mask = (perm == y.view(-1, 1)).int()
+
+        first_true_indices = torch.argmax(mask, dim=0)
+        first_true_indices_tags[first_true_indices_tags == 0] = 1000
+
+        hits1 = mask[:, :1].sum().item() / y.size(0) + (first_true_indices_tags == first_true_indices).sum() / len(
+            first_true_indices)
+        return hits1.item()
 
 
 class renet_crf(torch.nn.Module):

@@ -1,6 +1,6 @@
 import torch
 from pytorch_partial_crf import CRF, PartialCRF
-
+from config import CFG
 # # Create
 # num_tags = 6
 # model = CRF(num_tags)
@@ -66,22 +66,3 @@ class BiLSTM_crf(nn.Module):
     def bilstm_forward(self, x):
         import numpy as np
         return np.array(self.crf.viterbi_decode(self.bilstm(x)))
-
-# if __name__ == "__main__":
-#     # 定义输入数据的维度和超参数
-#     input_size = 10  # 输入特征维度
-#     hidden_size = 20  # LSTM 隐藏层维度
-#     num_layers = 2  # LSTM 层数
-#     prop_tags = 5  # 每个时间步的属性标签数
-#
-#     # 创建双向 LSTM 模型实例
-#     model = BiLSTM(input_size, hidden_size, num_layers, prop_tags)
-#
-#     # 创建输入数据
-#     batch_size = 3
-#     sequence_length = 5
-#     x = torch.randn(batch_size, sequence_length, input_size)
-#
-#     # 前向传播
-#     outputs = model(x)
-#     print(outputs.shape)  # 输出维度：[batch_size, seqlen, prop_tags]
