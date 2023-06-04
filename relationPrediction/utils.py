@@ -19,7 +19,6 @@ import logging
 import time
 import pickle
 
-
 CUDA = torch.cuda.is_available()
 
 
@@ -68,9 +67,9 @@ def render_model_graph(model, Corpus_, train_indices, relation_adj, averaged_ent
 
 
 def print_grads(model):
-    print(model.relation_embed.weight.grad)
+    print(model.relation_embed.baseline_weight.grad)
     print(model.relation_gat_1.attention_0.a.grad)
-    print(model.convKB.fc_layer.weight.grad)
+    print(model.convKB.fc_layer.baseline_weight.grad)
     for name, param in model.named_parameters():
         print(name, param.grad)
 
@@ -95,7 +94,7 @@ def plot_grad_flow(named_parameters, parameters):
     layers = []
 
     for n, p in zip(named_parameters, parameters):
-        if(p.requires_grad) and ("bias" not in n):
+        if (p.requires_grad) and ("bias" not in n):
             layers.append(n)
             ave_grads.append(p.grad.abs().mean())
             max_grads.append(p.grad.abs().max())
@@ -121,7 +120,7 @@ def plot_grad_flow_low(named_parameters, parameters):
     layers = []
     for n, p in zip(named_parameters, parameters):
         # print(n)
-        if(p.requires_grad) and ("bias" not in n):
+        if (p.requires_grad) and ("bias" not in n):
             layers.append(n)
             ave_grads.append(p.grad.abs().mean())
     plt.plot(ave_grads, alpha=0.3, color="b")

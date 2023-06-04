@@ -5,26 +5,13 @@ import torch.nn.functional as F
 from torch_geometric.datasets import ICEWS18
 from torch_geometric.loader import DataLoader
 from Myrenet import RENet
+from config import CFG
 import numpy as np
 from tqdm import tqdm
 
 import wandb
-from easydict import EasyDict
 
-CFG = EasyDict()
-CFG.project = "temporal-knowledge-base-completion"
-CFG.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-CFG.epochs = 1
-CFG.seq_len = 5
-CFG.model = "Renet"
-CFG.tags = "Baseline"
-CFG.batch_size = 4096
-CFG.hidden_channels = 10
-CFG.wandb = False
 if CFG.wandb:
-    wandb.login(key="8df071c79082d7ec99e9da99802221c4edef7d8c")
-
-
     def wandb_init():
         config = {k: v for k, v in CFG.items() if '__' not in k}
         run = wandb.init(
@@ -78,7 +65,7 @@ def train(loader):
 def test(loader):
     model.eval()
     # Compute Mean Reciprocal Rank (MRR) and Hits@1/3/10.
-    result = torch.tensor([0, 0, 0, 0], dtype=torch.float)
+    result = torch.tensor([0, 0, 0, 0, 0], dtype=torch.float)
     for data in tqdm(loader):
         data = data.to(CFG.device)
         with torch.no_grad():
