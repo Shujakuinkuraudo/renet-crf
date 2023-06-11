@@ -231,7 +231,7 @@ class RENet(torch.nn.Module):
 
         # 将聚类标签转换为PyTorch张量
         cluster_labels = torch.from_numpy(labels)
-        self.cluster_labels = cluster_labels.long().cuda()
+        self.cluster_labels = cluster_labels.long().to(CFG.device)
 
     def generate_crf_train(self, data: Data) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         seq_len_mul_hidden = self.seq_len * self.hidden_channels

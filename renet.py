@@ -139,7 +139,8 @@ if CFG.baseline_train:
         train(train_loader)
         mrr, hits1, hits2, hits3, hits10 = test(test_loader)
         if CFG.wandb:
-            wandb.log({"epoch": epoch, "MRR": mrr, "Hits@1": hits1, "Hits@3": hits3, "Hits@10": hits10})
+            wandb.log(
+                {"epoch": epoch, "MRR": mrr, "Hits@1": hits1, "Hits@2": hits2, "Hits@3": hits3, "Hits@10": hits10})
         torch.save(model.state_dict(), "weights/" + str(epoch) + ".pt")
 
 model.cluster(5)

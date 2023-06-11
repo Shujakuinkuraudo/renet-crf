@@ -57,9 +57,10 @@ class BiLSTM_crf(nn.Module):
         super().__init__()
         self.bilstm = BiLSTM(input_size, hidden_size, num_layers, prop_tags)
         self.crf = PartialCRF(prop_tags)
+        self.softmax = torch.nn.Softmax(-1)
 
     def forward(self, x, tags):  # x[batch_size,seq_len,input_size]
-        emissions = self.bilstm(x)
+        emissions = self.softmax(self.bilstm(x))
         out = self.crf(emissions, tags)
         return out
 
